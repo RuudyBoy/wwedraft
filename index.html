@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WWE Random Draft Simulator</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for draft status */
+        #draft-status.raw { color: #f87171; /* red-400 */ }
+        #draft-status.smackdown { color: #60a5fa; /* blue-400 */ }
+        
+        /* Styles for the modal text */
+        #modal-brand-text.raw { color: #ef4444; /* red-500 */ }
+        #modal-brand-text.smackdown { color: #3b82f6; /* blue-500 */ }
+        
+        /* Next pick brand color */
+        #next-pick-brand.raw { color: #f87171; /* red-400 */ }
+        #next-pick-brand.smackdown { color: #60a5fa; /* blue-400 */ }
+
+        /* Pop-in animation for the final name */
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        #modal-wrestler-name.final-pick {
+            animation: popIn 0.3s ease-out forwards;
+        }
+        #modal-image-container.final-pick {
+             animation: popIn 0.2s ease-out forwards;
+        }
+        /* Style for the drumroll image */
+        #modal-wrestler-image.drumroll {
+            filter: blur(2px);
+            opacity: 0.8;
+            transform: scale(0.95);
+            transition: none; /* No smoothing during drumroll */
+        }
+        /* Style for the final image */
+        #modal-wrestler-image.final-pick-image {
+            filter: blur(0);
+            opacity: 1;
+            transform: scale(1);
+            transition: transform 0.2s ease-out, filter 0.2s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans antialiased">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold mb-2">WWE Random Draft Simulator</h1>
+            <p class="text-lg text-gray-400">Click wrestlers from the database to add them to the draft pool.</p>
+        </header>
+
+        <!-- New Layout: Database on Left, Draft Area on Right -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+            <!-- Column 1: Database & Draft Controls -->
+            <div class="space-y-8">
+                
+                <!-- Wrestler Database Section -->
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-semibold mb-4">1. Wrestler Database (Click to Add)</h2>
+                    <div id="wrestler-database-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 h-[40rem] overflow-y-auto pr-2">
+                        <!-- Wrestler Database items will be populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Draft Controls -->
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg sticky top-8">
+                    <h2 class="text-2xl font-semibold mb-4">
+                        2. Draft Controls (Next Pick: <span id="next-pick-brand" class="font-bold raw">RAW</span>)
+                    </h2>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button id="draft-next-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow transition duration-200">
+                            Draft Next Wrestler
+                        </button>
+                        <button id="draft-all-btn" class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-gray-900 font-bold py-3 px-6 rounded-lg shadow transition duration-200">
+                            Draft All Remaining
+                        </button>
+                        <button id="reset-draft-btn" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg shadow transition duration-200">
+                            Reset Draft
+                        </button>
+                    </div>
+                    <div class="text-center mt-4 h-6">
+                        <span id="draft-status" class="text-lg font-medium transition-all duration-300"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Column 2: Main Draft Area -->
+            <div class="space-y-8">
+                <!-- Available Wrestlers -->
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-semibold mb-4 text-center">Available for Draft (<span id="available-count">0</span>)</h2>
+                    <ul id="available-wrestlers-list" class="space-y-3 h-64 overflow-y-auto pr-2">
+                        <!-- Wrestlers will be populated by JS -->
+                    </ul>
+                </div>
+
+                <!-- Rosters -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    <!-- Raw Roster -->
+                    <div class="bg-gray-800 p-6 rounded-lg shadow-lg border-t-4 border-red-500">
+                        <div class="flex flex-col items-center mb-2">
+                            <img src="https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/3a9ae534-5709-4eed-a07e-a54a9d444243/dgkpczc-b3c2105c-751f-44d0-b93b-e65ec6f389d8.png/v1/fill/w_400,h_150/raw_logo__2002_2006__by_animeandlegofan2000_dgkpczc-fullview.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9MTUwIiwicGF0aCI6Ii9mLzNhOWFlNTM0LTU3MDktNGVlZC1hMDdlLWE1NGE5ZDQ0NDI0My9kZ2twY3pjLWIzYzIxMDVjLTc1MWYtNDRkMC1iOTNiLWU2NWVjNmYzODlkOC5wbmciLCJ3aWR0aCI6Ijw9NDAwIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmltYWdlLm9wZXJhdGlvbnMiXX0.quFD-Vp8O_DOyonBlNFMQk8ER-uV953I0vLdRQ9w6LQ" alt="RAW Logo" class="h-10 mb-2" />
+                        </div>
+                        <h2 class="text-3xl font-bold mb-4 text-center text-red-400">RAW (<span id="raw-count">0</span>)</h2>
+                        <ul id="raw-roster-list" class="space-y-2 h-80 overflow-y-auto pr-2">
+                            <!-- Raw picks will be populated by JS -->
+                        </ul>
+                    </div>
+
+                    <!-- Smackdown Roster -->
+                    <div class="bg-gray-800 p-6 rounded-lg shadow-lg border-t-4 border-blue-500">
+                        <div class="flex flex-col items-center mb-2">
+                            <img src="https://preview.redd.it/every-smackdown-logo-v0-ae6lhg0u9kod1.png?width=666&auto=webp&s=273d50476115313af1a2c7c2893a1f53c1d305b3" alt="Smackdown Logo" class="h-10 mb-2" />
+                        </div>
+                        <h2 class="text-3xl font-bold mb-4 text-center text-blue-400">SMACKDOWN (<span id="smackdown-count">0</span>)</h2>
+                        <ul id="smackdown-roster-list" class="space-y-2 h-80 overflow-y-auto pr-2">
+                            <!-- Smackdown picks will be populated by JS -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Draft Pick Modal -->
+    <div id="draft-overlay" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center hidden z-50 p-4">
+        <div id="draft-modal" class="bg-gray-800 rounded-lg shadow-2xl p-8 sm:p-12 text-center overflow-hidden w-full max-w-2xl">
+            <h2 id="modal-brand-text" class="text-3xl sm:text-4xl font-bold mb-8 transition-all duration-300">...</h2>
+            
+            <!-- Image Container -->
+            <div id="modal-image-container" class="mb-8 hidden">
+                <img id="modal-wrestler-image" src="https://placehold.co/400x400/374151/FFF?text=?" alt="Wrestler" class="w-48 h-48 object-cover rounded-full mx-auto shadow-lg border-4 border-gray-600">
+            </div>
+            
+            <div class="h-24 flex items-center justify-center"> <!-- Container to prevent layout shift -->
+                <h1 id="modal-wrestler-name" class="text-4xl sm:text-6xl font-extrabold transition-all duration-200" style="text-shadow: 2px 2px 8px rgba(0,0,0,0.5);">...</h1>
+            </div>
+        </div>
+    </div>
+
+    <!-- Define createPlaceholderUrl before loading the database -->
+    <script>
+        function createPlaceholderUrl(name) {
+            const formattedName = name.replace(/ /g, '+');
+            return `https://placehold.co/400x400/374151/FFF?text=${formattedName}`;
+        }
+    </script>
+    <!-- Load the wrestler database -->
+    <script src="masterWrestlerDatabase.js"></script>
+
+    <script>
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- STATE ---
+            let availableWrestlers = []; // Will hold objects { name, imageUrl }
+            let rawRoster = []; // Will hold objects
+            let smackdownRoster = []; // Will hold objects
+            
+            let nextPickBrand = 'raw';
+            let isDrafting = false;
+            let drumrollInterval = null;
+
+            // --- DOM ELEMENTS ---
+            // Removed: wrestlerInput, addBtn, loadTemplateBtn
+            const resetBtn = document.getElementById('reset-draft-btn');
+            const draftNextBtn = document.getElementById('draft-next-btn');
+            const draftAllBtn = document.getElementById('draft-all-btn');
+            
+            const databaseListEl = document.getElementById('wrestler-database-list');
+            const availableList = document.getElementById('available-wrestlers-list');
+            const rawList = document.getElementById('raw-roster-list');
+            const smackdownList = document.getElementById('smackdown-roster-list'); // *** This was the fix ***
+
+            const availableCount = document.getElementById('available-count');
+            const rawCount = document.getElementById('raw-count');
+            const smackdownCount = document.getElementById('smackdown-count');
+            
+            // Removed: loadStatus
+            const draftStatus = document.getElementById('draft-status');
+            
+            const nextPickBrandEl = document.getElementById('next-pick-brand');
+            
+            // Modal Elements
+            const draftOverlay = document.getElementById('draft-overlay');
+            const modalBrandText = document.getElementById('modal-brand-text');
+            const modalImageContainer = document.getElementById('modal-image-container');
+            const modalWrestlerImage = document.getElementById('modal-wrestler-image');
+            const modalWrestlerName = document.getElementById('modal-wrestler-name');
+
+            // --- MAIN RENDER FUNCTION ---
+            
+            function render() {
+                renderDatabaseList();
+                renderAvailableList();
+                renderRosterLists();
+                updateCountsAndButtons();
+            }
+
+            // --- SUB-RENDER FUNCTIONS ---
+
+            function renderDatabaseList() {
+                masterWrestlerDatabase.sort((a, b) => a.name.localeCompare(b.name)); // Sort database list by name
+
+                databaseListEl.innerHTML = '';
+                
+                const allAddedNames = [
+                    ...availableWrestlers.map(w => w.name),
+                    ...rawRoster.map(w => w.name),
+                    ...smackdownRoster.map(w => w.name)
+                ];
+                
+                const draftedNames = [
+                    ...rawRoster.map(w => w.name),
+                    ...smackdownRoster.map(w => w.name)
+                ];
+
+                masterWrestlerDatabase.forEach(wrestler => {
+                    const button = document.createElement('button');
+                    button.className = 'bg-gray-700 rounded-lg shadow-md overflow-hidden transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 flex flex-col items-center justify-center min-h-[110px]';
+
+                    const isDrafted = draftedNames.includes(wrestler.name);
+                    const isAdded = allAddedNames.includes(wrestler.name);
+
+                    let overlayText = '';
+                    if (isDrafted) {
+                        overlayText = 'DRAFTED';
+                    } else if (isAdded) {
+                        overlayText = 'IN POOL';
+                    }
+
+                    button.innerHTML = `
+                        <span class="block text-lg font-semibold p-3 truncate text-center">${wrestler.name}</span>
+                        ${isAdded ? `<div class="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
+                            <span class="text-white text-base font-bold">${overlayText}</span>
+                         </div>` : ''}
+                    `;
+                    
+                    button.disabled = isAdded || isDrafted;
+                    if (isAdded) {
+                        button.classList.add('opacity-50', 'cursor-not-allowed');
+                    }
+
+                    if (!isAdded) {
+                        button.addEventListener('click', () => {
+                            availableWrestlers.push(wrestler);
+                            render();
+                        });
+                    }
+                    
+                    databaseListEl.appendChild(button);
+                });
+            }
+
+            function renderAvailableList() {
+                availableList.innerHTML = '';
+                availableWrestlers.sort((a, b) => a.name.localeCompare(b.name));
+                
+                if (availableWrestlers.length === 0) {
+                    availableList.innerHTML = '<li class="text-gray-500 text-center italic">Draft pool is empty.</li>';
+                } else {
+                    availableWrestlers.forEach(wrestler => {
+                        const li = document.createElement('li');
+                        li.className = 'bg-gray-700 p-3 rounded-lg shadow font-medium';
+                        li.textContent = wrestler.name; // Display only the name
+                        availableList.appendChild(li);
+                    });
+                }
+            }
+
+            function renderRosterLists() {
+                rawList.innerHTML = '';
+                smackdownList.innerHTML = '';
+                
+                rawRoster.sort((a, b) => a.name.localeCompare(b.name));
+                smackdownRoster.sort((a, b) => a.name.localeCompare(b.name));
+
+                // Render Raw Roster
+                if (rawRoster.length === 0) {
+                    rawList.innerHTML = '<li class="text-gray-500 italic">No wrestlers drafted.</li>';
+                } else {
+                    rawRoster.forEach(wrestler => {
+                        const li = document.createElement('li');
+                        li.className = 'bg-red-900 bg-opacity-30 text-white p-3 rounded-lg shadow font-medium';
+                        li.textContent = wrestler.name; 
+                        rawList.appendChild(li);
+                    });
+                }
+
+                // Render Smackdown Roster
+                if (smackdownRoster.length === 0) {
+                    smackdownList.innerHTML = '<li class="text-gray-500 italic">No wrestlers drafted.</li>';
+                } else {
+                    smackdownRoster.forEach(wrestler => {
+                        const li = document.createElement('li');
+                        li.className = 'bg-blue-900 bg-opacity-30 text-white p-3 rounded-lg shadow font-medium';
+                        li.textContent = wrestler.name; 
+                        smackdownList.appendChild(li);
+                    });
+                }
+            }
+            
+            function updateCountsAndButtons() {
+                // Update counts
+                availableCount.textContent = availableWrestlers.length;
+                rawCount.textContent = rawRoster.length;
+                smackdownCount.textContent = smackdownRoster.length;
+                
+                nextPickBrandEl.textContent = nextPickBrand.toUpperCase();
+                nextPickBrandEl.className = `font-bold ${nextPickBrand}`;
+                
+                // Update button states
+                const noWrestlers = availableWrestlers.length === 0;
+                draftNextBtn.disabled = noWrestlers || isDrafting;
+                draftAllBtn.disabled = noWrestlers || isDrafting;
+                resetBtn.disabled = isDrafting;
+            }
+
+            // --- HELPER FUNCTIONS ---
+            
+            function showDraftStatus(message, type = 'draft') {
+                draftStatus.textContent = message;
+                if (type === 'raw') draftStatus.className = 'text-lg font-medium raw';
+                else if (type === 'smackdown') draftStatus.className = 'text-lg font-medium smackdown';
+                else if (type === 'reset') draftStatus.className = 'text-lg font-medium text-yellow-400';
+                else draftStatus.className = 'text-lg font-medium text-green-400';
+                
+                setTimeout(() => {
+                    draftStatus.textContent = '';
+                    draftStatus.className = '';
+                }, 3000);
+            }
+            
+            // Removed: addWrestler(), loadTemplate()
+
+            // --- DRAFTING FUNCTIONS ---
+
+            function draftNextWrestler() {
+                if (isDrafting || availableWrestlers.length === 0) return;
+
+                isDrafting = true;
+
+                const currentPickBrand = nextPickBrand;
+                const index = Math.floor(Math.random() * availableWrestlers.length);
+                const [draftedWrestler] = availableWrestlers.splice(index, 1);
+
+                if (currentPickBrand === 'raw') {
+                    rawRoster.push(draftedWrestler);
+                } else {
+                    smackdownRoster.push(draftedWrestler);
+                }
+
+                nextPickBrand = (currentPickBrand === 'raw') ? 'smackdown' : 'raw';
+                render();
+
+                modalBrandText.textContent = `${currentPickBrand.toUpperCase()} IS ON THE CLOCK`;
+                modalBrandText.className = `text-3xl sm:text-4xl font-bold mb-8 transition-all duration-300 ${currentPickBrand}`;
+
+                // Hide the image container for the drumroll
+                modalImageContainer.classList.add('hidden');
+                modalImageContainer.classList.remove('final-pick');
+                // No need to set modalWrestlerImage.src or .alt
+
+                modalWrestlerName.textContent = '';
+                modalWrestlerName.classList.remove('final-pick');
+
+                draftOverlay.classList.remove('hidden');
+
+                // After 1.5s, show the drumroll with names
+                setTimeout(() => {
+                    modalBrandText.textContent = 'THE PICK IS IN...';
+
+                    // Show the name area for the drumroll
+                    modalWrestlerName.textContent = '';
+                    modalWrestlerName.classList.remove('final-pick');
+                    modalImageContainer.classList.add('hidden');
+
+                    const drumrollPool = [...availableWrestlers, draftedWrestler];
+                    drumrollInterval = setInterval(() => {
+                        if (drumrollPool.length === 0) return;
+                        const randomWrestler = drumrollPool[Math.floor(Math.random() * drumrollPool.length)];
+                        modalWrestlerName.textContent = randomWrestler.name;
+                    }, 100);
+
+                }, 1500);
+
+                // After 3s of drumroll, reveal the pick
+                setTimeout(() => {
+                    clearInterval(drumrollInterval);
+
+                    // Hide the image container for the reveal as well
+                    modalImageContainer.classList.add('hidden');
+
+                    setTimeout(() => {
+                        modalWrestlerName.textContent = draftedWrestler.name;
+                        modalWrestlerName.classList.add('final-pick');
+                    }, 300);
+
+                }, 4500);
+
+                setTimeout(() => {
+                    draftOverlay.classList.add('hidden');
+                    isDrafting = false;
+                    render();
+                }, 7300);
+            }
+
+
+            function draftAllWrestlers() {
+                if (availableWrestlers.length === 0) return;
+
+                while (availableWrestlers.length > 0) {
+                    const index = Math.floor(Math.random() * availableWrestlers.length);
+                    const [wrestler] = availableWrestlers.splice(index, 1); // wrestler is an object
+                    
+                    if (nextPickBrand === 'raw') {
+                        rawRoster.push(wrestler);
+                        nextPickBrand = 'smackdown';
+                    } else {
+                        smackdownRoster.push(wrestler);
+                        nextPickBrand = 'raw';
+                    }
+                }
+                
+                showDraftStatus('All remaining wrestlers have been drafted!', 'success');
+                render();
+            }
+
+            function resetDraft() {
+                availableWrestlers = [];
+                rawRoster = [];
+                smackdownRoster = [];
+                nextPickBrand = 'raw';
+                isDrafting = false;
+                clearInterval(drumrollInterval);
+                draftOverlay.classList.add('hidden'); 
+                
+                showDraftStatus('Draft reset. All lists cleared.', 'reset');
+                render(); // This will re-render the database list as all available
+            }
+
+    
+            // --- EVENT LISTENERS ---
+            // Removed: addBtn, loadTemplateBtn, wrestlerInput
+            draftNextBtn.addEventListener('click', draftNextWrestler);
+            draftAllBtn.addEventListener('click', draftAllWrestlers);
+            resetBtn.addEventListener('click', resetDraft);
+
+            // --- INITIAL RENDER ---
+            render();
+        });
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- KEYBOARD SUPPORT ---
+        const keyBindings = {
+            draftNext: 'Enter', // Draft next wrestler
+            draftAll: 'a', // Draft all wrestlers
+            reset: 'r', // Reset draft
+            navigateUp: 'ArrowUp', // Navigate up in the database
+            navigateDown: 'ArrowDown', // Navigate down in the database
+            addToPool: ' ', // Add wrestler to the pool (spacebar)
+        };
+
+        let focusedIndex = 0; // Tracks the currently focused wrestler in the database
+
+        // Focus a wrestler in the database
+        function focusWrestler(index) {
+            const wrestlers = document.querySelectorAll('#wrestler-database-list button');
+            if (wrestlers.length === 0) return;
+
+            // Ensure the index is within bounds
+            focusedIndex = (index + wrestlers.length) % wrestlers.length;
+
+            // Remove focus from all buttons
+            wrestlers.forEach(wrestler => wrestler.classList.remove('ring-2', 'ring-blue-500'));
+
+            // Add focus to the current button
+            const focusedWrestler = wrestlers[focusedIndex];
+            focusedWrestler.classList.add('ring-2', 'ring-blue-500');
+            focusedWrestler.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // Handle key presses
+        function handleKeyPress(event) {
+            switch (event.key) {
+                case keyBindings.draftNext:
+                    draftNextWrestler();
+                    break;
+                case keyBindings.draftAll:
+                    draftAllWrestlers();
+                    break;
+                case keyBindings.reset:
+                    resetDraft();
+                    break;
+                case keyBindings.navigateUp:
+                    focusWrestler(focusedIndex - 1);
+                    break;
+                case keyBindings.navigateDown:
+                    focusWrestler(focusedIndex + 1);
+                    break;
+                case keyBindings.addToPool:
+                    const wrestlers = document.querySelectorAll('#wrestler-database-list button');
+                    if (wrestlers[focusedIndex] && !wrestlers[focusedIndex].disabled) {
+                        wrestlers[focusedIndex].click();
+                    }
+                    break;
+            }
+        }
+
+        // Add event listener for keydown
+        document.addEventListener('keydown', handleKeyPress);
+
+        // Initial focus on the first wrestler in the database
+        focusWrestler(focusedIndex);
+    });
+    </script>
+</body>
+</html>
